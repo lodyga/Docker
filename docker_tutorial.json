@@ -1,0 +1,258 @@
+// To delete all containers including its volumes use,
+docker rm -vf $(docker ps -a -q)
+// To delete all the images,
+docker rmi -f $(docker images -a -q)
+docker image rm [OPTIONS] IMAGE [IMAGE...]
+// version check
+docker --version
+docker-compose --version
+
+
+
+
+
+docker run hello-world
+docker run -it ubuntu bash
+-i interactive - provide input using your keyboard 
+-t attached to terminal - output is logged to your terminal
+docker run -dp 80:80 docker/getting-started
+-d detach mode - in background
+-p port
+// show active containers
+docker container ls
+// show all containers
+docker container ls -a
+docker ps -show containers
+// build the container image
+docker build -t getting-started .
+// human-readable name for the final image
+-t 
+The . at the end of the docker build command tells that Docker should look for the Dockerfile in the current directory.
+// run locally
+docker run -dp 3000:3000 getting-started
+docker stop <the-container-id>
+// remove container
+docker rm <the-container-id>
+docker rm -f <container-id>
+// force flag
+-f 
+docker push lodyga/getting-started
+// show images
+docker image ls
+docker login -u YOUR-USER-NAME
+// tag
+docker tag getting-started YOUR-USER-NAME/getting-started
+// run on play_with_docker
+docker run -dp 3000:3000 YOUR-USER-NAME/getting-started
+// Start an ubuntu container that will create a file named /data.txt with a random number between 1 and 10000.Start an ubuntu container that will create a file named /data.txt with a random number between 1 and 10000.
+docker run -d ubuntu bash -c "shuf -i 1-10000 -n 1 -o /data.txt && tail -f /dev/null"
+// see the content of the /data.txt
+docker exec <container-id> cat /data.txt
+// start another ubuntu container
+docker run -it ubuntu ls /
+// named volume, hmm..... somehow it works, but wheres the todo-db file ?
+docker volume create todo-db
+// Start the todo app container, but add the -v flag to specify a volume mount. We will use the named volume and mount it to /etc/todos, which will capture all files created at the path.
+docker run -dp 3000:3000 -v todo-db:/etc/todos getting-started
+// lag to specify a volume mount
+-v
+// todo-db location
+docker volume inspect todo-db
+
+in app directory
+docker run -dp 3000:3000 \
+    -w /app -v "$(pwd):/app" \
+    node:12-alpine \
+    sh -c "yarn install && yarn run dev"
+
+-dp 3000:3000 - same as before. Run in detached (background) mode and create a port mapping
+-w /app - sets the “working directory” or the current directory that the command will run from
+-v "$(pwd):/app" - bind mount the current directory from the host in the container into the /app directory
+node:12-alpine - the image to use. Note that this is the base image for our app from the Dockerfile
+sh -c "yarn install && yarn run dev" - the command. We’re starting a shell using sh (alpine doesn’t have bash) and running yarn install to install all dependencies and then running yarn run dev. If we look in the package.json, we’ll see that the dev script is starting nodemon.
+
+// watch the logs
+docker logs -f
+
+// When you’re done watching the logs, exit out by hitting 
+Ctrl+C.
+
+// When you’re done, stop the container and build your new image using
+docker build -t getting-started .
+
+
+
+
+// Multi container apps
+// Container networking
+docker network create todo-app
+
+docker run -d \
+    --network todo-app --network-alias mysql \
+    -v todo-mysql-data:/var/lib/mysql \
+    -e MYSQL_ROOT_PASSWORD=secret \
+    -e MYSQL_DATABASE=todos \
+    mysql:5.7
+
+// login to the database
+docker exec -it <mysql-container-id> mysql -u root -p
+SHOW DATABASES;
+
+// Start a new container using the nicolaka/netshoot image
+docker run -it --network todo-app nicolaka/netshoot
+
+// DNS tool
+dig mysql
+
+// We’ll specify each of the environment variables above, as well as connect the container to our app network.
+// must be in app folder
+docker run -dp 3000:3000 \
+   -w /app -v "$(pwd):/app" \
+   --network todo-app \
+   -e MYSQL_HOST=mysql \
+   -e MYSQL_USER=root \
+   -e MYSQL_PASSWORD=secret \
+   -e MYSQL_DB=todos \
+   node:12-alpine \
+   sh -c "yarn install && yarn run dev"
+
+// logs, app id
+docker logs <container-id>
+
+// login to mysql, mysql id
+docker exec -it <mysql-container-id> mysql -p todos
+select * from todo_items;
+
+
+
+
+
+// Docker Compose
+// Define the app service; same as before
+docker run -dp 3000:3000 \
+  -w /app -v "$(pwd):/app" \
+  --network todo-app \
+  -e MYSQL_HOST=mysql \
+  -e MYSQL_USER=root \
+  -e MYSQL_PASSWORD=secret \
+  -e MYSQL_DB=todos \
+  node:12-alpine \
+  sh -c "yarn install && yarn run dev"
+
+// define MySQL service; same as before
+docker run -d \
+    --network todo-app --network-alias mysql \
+    -v todo-mysql-data:/var/lib/mysql \
+    -e MYSQL_ROOT_PASSWORD=secret \
+    -e MYSQL_DATABASE=todos \
+    mysql:5.7
+
+// docker-compose.yml
+version: "3.7"
+
+services:
+  app:
+    image: node:12-alpine
+    command: sh -c "yarn install && yarn run dev"
+    ports:
+      - 3000:3000
+    working_dir: /app
+    volumes:
+      - ./:/app
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_USER: root
+      MYSQL_PASSWORD: secret
+      MYSQL_DB: todos
+
+  mysql:
+    image: mysql:5.7
+    volumes:
+      - todo-mysql-data:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: secret
+      MYSQL_DATABASE: todos
+
+volumes:
+  todo-mysql-data:
+
+
+// start up
+docker-compose up -d
+
+// show logs
+docker-compose logs -f
+
+// tear it all down
+docker-compose down
+
+
+
+
+
+
+// Image-building best practices
+// Security scanning
+docker scan hello-world
+
+docker scan getting-started
+// docker: 'scan' is not a docker command.
+// restart VSC
+// Failed to scan image "getting-started". Please make sure the image and/or repository exist, and that you are using the correct credentials.
+// lodyga/getting-started
+
+// image history
+docker image history lodyga/getting-started
+docker image history --no-trunc lodyga/getting-started
+
+// package.json
+# syntax=docker/dockerfile:1
+FROM node:12-alpine
+WORKDIR /app
+COPY package.json yarn.lock ./
+RUN yarn install --production
+COPY . .
+CMD ["node", "src/index.js"]
+
+// .dockerignore
+node_modules
+
+
+docker build -t getting-started .
+
+
+
+
+
+// Python guide
+// enable BuildKit 
+DOCKER_BUILDKIT=1 docker build .
+
+// Sample application
+cd /path/to/python-docker
+pip3 install Flask
+pip3 freeze | grep Flask >> requirements.txt
+touch app.py
+
+// Test the application
+python3 -m flask run
+
+// Dockerfile
+# syntax=docker/dockerfile:1
+FROM python:3.8-slim-buster
+WORKDIR /app
+COPY requirements.txt requirements.txt
+RUN pip3 install -r requirements.txt
+COPY . .
+CMD [ "python3", "-m" , "flask", "run", "--host=0.0.0.0"]
+
+// Build an image
+docker build --tag python-docker .
+
+// new tag for the image
+docker tag python-docker:latest python-docker:v1.0.0
+
+// rmi command stands for remove image
+docker rmi python-docker:v1.0.0
+
+
